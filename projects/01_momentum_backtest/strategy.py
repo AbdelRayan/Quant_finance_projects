@@ -23,19 +23,32 @@ def ma_crossover(prices: pd.DataFrame, fast: int = 50, slow: int = 200) -> pd.Da
     return on / n_assets
 
 
-def momentum_12_1(prices: pd.DataFrame, top_n: int = 3, rebalance: str = "ME") -> pd.DataFrame:
-    """Your turn: 12-1 cross-sectional momentum.
+def momentum_12_1(
+    prices: pd.DataFrame,
+    top_n: int = 3,
+    lookback: int = 252,
+    skip: int = 21,
+) -> pd.DataFrame:
+    """12-1 cross-sectional momentum, rebalanced on the last trading day of each month.
 
-    Spec (see README, step 4):
-    - Score each asset by its return from 252 trading days ago to 21 days ago
-      (skip the most recent month).
-    - On each rebalance date (month end), hold the ``top_n`` assets with equal
-      weight; hold the weights constant until the next rebalance.
-    - Use only prices up to the rebalance date.
+    - Score: return from ``lookback`` days ago to ``skip`` days ago. Skipping
+      the most recent month avoids short-term reversal (last month's winners
+      tend to give some of it back).
+    - On each month's last trading day, hold the ``top_n`` highest scores at
+      ``1 / top_n`` weight each; keep those weights until the next month end.
+    - Before a full lookback exists, hold nothing.
 
-    Hints: ``prices.shift(21) / prices.shift(252) - 1``, ``.rank(axis=1)``,
-    ``.resample(rebalance).last()``, then ``.reindex(prices.index).ffill()``.
-    Add tests in ``tests/test_strategy.py`` once it works, including the
-    look-ahead check used for ``ma_crossover``.
+    Weights at date t use prices up to t only; the backtester trades them at t+1.
     """
-    raise NotImplementedError("Implement 12-1 momentum (Project 1, step 4)")
+    score = prices.shift(skip) / prices.shift(lookback) - 1
+
+    # Last actual trading day of each month (calendar month ends can fall on weekends).
+    dates = prices.index.to_series()
+    rebalance_dates = dates.groupby(prices.index.to_period("M")).max()
+
+    monthly_score = score.loc[rebalance_dates]
+    rank = monthly_score.rank(axis=1, ascending=False, method="first")
+    chosen = (rank <= top_n) & monthly_score.notna()
+    monthly_weights = chosen.astype(float) / top_n
+
+    return monthly_weights.reindex(prices.index).ffill().fillna(0.0)
