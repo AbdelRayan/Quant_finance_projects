@@ -10,8 +10,9 @@ happens in crises (stress tests).
 
 - [x] Simulation engine: normal, bootstrap and block bootstrap; VaR/ES; Kupiec test (`src/qfp/montecarlo.py`, `tests/test_montecarlo.py`)
 - [x] Run script: one-year outlook, VaR backtest, stress tests, fan chart (`run.py`)
-- [ ] Run on real data and read the results
-- [ ] Results and limitations write-up
+- [x] Volatility-aware VaR: EWMA normal and filtered historical simulation
+- [x] Run on real data and read the results
+- [x] Results and limitations write-up
 
 ## Setup
 
@@ -36,3 +37,56 @@ happens in crises (stress tests).
 ## Run
 
     python projects/05_monte_carlo/run.py
+
+## Results (history 2005-01 to 2026-10)
+
+### 1. One-year outlook, EUR 100,000, 10,000 paths per method
+
+| | Normal | Bootstrap | Block bootstrap |
+|---|---|---|---|
+| 5th percentile | 85,663 | 85,538 | 87,571 |
+| Median | 109,536 | 109,617 | 110,761 |
+| 95th percentile | 139,837 | 141,927 | 135,083 |
+| P(loss) | 27.1% | 27.0% | 21.6% |
+| VaR 95% | 14,337 | 14,462 | 12,429 |
+| ES 95% | 19,374 | 19,743 | 19,015 |
+| VaR 99% | 22,515 | 22,957 | 22,633 |
+| ES 99% | 26,662 | 26,685 | **28,281** |
+| Median max drawdown | -12.4% | -12.0% | -10.6% |
+| 5% worst max drawdown | -23.4% | -23.2% | **-24.7%** |
+
+### 2. Backtest of 1-day 99% VaR from 2018-01-01 (trailing 500-day window, 2,220 days, 22.2 breaches expected)
+
+| Model | Breaches | Kupiec p-value | Verdict at 5% |
+|---|---|---|---|
+| Normal | 58 | 0.0000 | Rejected |
+| EWMA normal (λ = 0.94) | 53 | 0.0000 | Rejected |
+| Historical | 34 | 0.0196 | Rejected |
+| Filtered historical | **32** | 0.0499 | Borderline (just rejected) |
+
+### 3. Stress tests (portfolio return)
+
+| Scenario | Return | EUR |
+|---|---|---|
+| 2008 crisis | -32.7% | -32,676 |
+| 2022 bear | -25.0% | -25,036 |
+| Covid crash | -22.8% | -22,836 |
+| Hypothetical shock (equities -30 to -35%, TLT +10%, GLD +5%) | -21.4% | -21,429 |
+
+## Interpretation
+
+1. **The methods agree on VaR but not on the tail.** VaR 99% is about EUR 22.5-23k whichever way we simulate. The difference shows up beyond it: the block bootstrap has the narrowest middle (lowest P(loss), 21.6%) but the largest ES 99% (EUR 28.3k) and the worst 5% drawdown. Keeping consecutive days together keeps bad days together, so calm years look calmer and bad years look worse. VaR alone would hide this; ES shows it.
+2. **Fat tails matter more than volatility timing.** Making the normal model react to current volatility (EWMA) only cut breaches from 58 to 53. Replacing the normal curve with the empirical distribution cut them to 34. Doing both (filtered historical) gave the best result, 32, but still about 10 more breaches than expected.
+3. **No model fully passes.** The remaining excess breaches likely come from sudden jumps (e.g. March 2020) that no trailing estimate can see coming, and from estimating a 1% quantile from only 500 days, which means about 5 tail observations.
+4. **Stress tests see what the simulation misses.** Replaying 2008 loses 32.7%, worse than the simulated one-year ES 99% (26.7-28.3k). Even though 2008 is in the history, resampling days or 20-day blocks rarely rebuilds a full year-long crisis. This is why risk teams report stress tests next to VaR and ES.
+
+## Limitations
+
+- Returns are the ETFs' own (USD) returns; the EUR figures only scale the result and ignore EUR/USD risk.
+- Daily rebalancing to equal weight and no transaction costs.
+- One portfolio and one test period (2018 onward); Kupiec only checks the breach count, not whether breaches cluster (Christoffersen's independence test would).
+- λ = 0.94 is the RiskMetrics default, not tuned, to avoid fitting the backtest.
+
+## Conclusion
+
+For this portfolio a risk number built on the normal distribution understates daily 99% risk by more than 2x in breach terms. Filtered historical simulation, which combines real fat-tailed returns with current volatility, is the best of the four models and sits right at the edge of the Kupiec test. The practical lesson: report ES next to VaR, use a fat-tailed, volatility-aware model, and always add stress tests for crises the data cannot reproduce.
