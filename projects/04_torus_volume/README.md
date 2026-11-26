@@ -10,8 +10,9 @@ Same idea as Project 2's calendar phase, now with two clocks and their interacti
 ## Status
 
 - [x] Simulation proof of concept (`torus_volume.py`)
-- [ ] Real intraday volume data
-- [ ] Stronger baselines and features (see plan below)
+- [x] Real-data script for BTC 15-minute volume (`crypto_volume.py`, Binance public data)
+- [x] Baseline (20-day slot average), harmonics k = 1..3, weekday and yesterday's level
+- [ ] Run on real data and read the results
 - [ ] Results and limitations write-up
 
 ## Simulation results
@@ -45,6 +46,17 @@ not that real markets have one. That is what the real-data step tests.
     python projects/04_torus_volume/torus_volume.py
 
 Prints the results and saves `torus_volume.png` next to the script.
+
+## Real data: BTC 15-minute volume
+
+    python projects/04_torus_volume/crypto_volume.py
+
+Downloads monthly BTCUSDT 15-minute klines from Binance's public archive
+(2021-01 to 2025-06, cached in `data/cache/binance/`), models log quote volume,
+trains on 2021–2023 and tests on 2024 onward. Compares four models: the 20-day
+slot average, torus additive, torus + interactions, and torus + interactions +
+weekday + yesterday's volume level. Prints RMSE on log volume and mean absolute
+percentage error, and saves `crypto_volume.png` (actual vs fitted grid).
 
 ## Plan for real data
 
