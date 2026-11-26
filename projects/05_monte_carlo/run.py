@@ -73,10 +73,15 @@ def main() -> None:
     var_ewma = -(norm.ppf(1 - LEVEL) * ewma_vol).shift(1)
     standardized = port / ewma_vol.shift(1)  # yesterday's vol estimate scales today's return
     var_fhs = -(standardized.rolling(WINDOW).quantile(1 - LEVEL) * ewma_vol).shift(1)
+    # Same, but the quantile uses all standardized history up to yesterday (expanding window):
+    # standardizing removes the calm/wild regimes, so old days stay comparable and the 1% tail
+    # rests on ~30+ observations instead of ~5.
+    var_fhs_long = -(standardized.expanding(min_periods=WINDOW).quantile(1 - LEVEL) * ewma_vol).shift(1)
     test = port[BACKTEST_START:]
     bt = {}
     for name, var in [("Normal", var_normal), ("Historical", var_hist),
-                      ("EWMA normal", var_ewma), ("Filtered historical", var_fhs)]:
+                      ("EWMA normal", var_ewma), ("Filtered historical", var_fhs),
+                      ("Filtered hist. (all history)", var_fhs_long)]:
         v = var[BACKTEST_START:]
         breaches = int((test < -v).sum())
         bt[name] = {"Days": len(test), "Expected breaches": round(len(test) * (1 - LEVEL), 1),
