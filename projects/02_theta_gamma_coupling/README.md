@@ -8,9 +8,9 @@ of fast moves depend on where we are in a slower cycle, and can that be traded?
 ## Status
 
 - [x] Causal PAC toolkit: band-pass phase/amplitude, Tort modulation index, surrogate test (`src/qfp/pac.py`, `tests/test_pac.py`)
-- [ ] Step 1: exploration on 7 ETFs (`explore.py`): is there significant coupling at all? (A: filtered theta/gamma, B: calendar month)
-- [ ] Step 2: hypothesis and trading rule (depends on step 1)
-- [ ] Step 3: backtest vs buy and hold, in and out of sample, with the Project 1 engine
+- [x] Step 1: exploration on 7 ETFs (`explore.py`). A (filtered theta/gamma): no coupling, p 0.35–0.92. B (calendar month): volatility coupling for TLT (p 0.014) and GLD (p 0.038), not significant after Bonferroni for 14 tests; clear turn-of-the-month pattern in equity *returns*.
+- [x] Step 2: rule: hold the 5 equity ETFs from the 5th-last to the 1st trading day of the month, cash otherwise (`strategy.turn_of_month`)
+- [ ] Step 3: backtest vs buy and hold, in and out of sample, plus window sensitivity (`run.py`)
 - [ ] Step 4: robustness (bands, window length, surrogates, multiple-testing correction)
 - [ ] Step 5: results and limitations write-up
 
@@ -46,4 +46,9 @@ The price is a delay (about half the filter length) and noisier phase.
 
 ## Run
 
-    python projects/02_theta_gamma_coupling/explore.py
+    python projects/02_theta_gamma_coupling/explore.py   # step 1: is there coupling?
+    python projects/02_theta_gamma_coupling/run.py       # step 3: backtest the rule
+
+Note on data snooping: the 5+1 window was picked after seeing the full-sample
+phase table, which includes the out-of-sample years. `run.py` therefore also
+prints the window chosen on 2005–2017 only, and how it did after 2018.
