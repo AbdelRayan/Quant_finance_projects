@@ -96,22 +96,65 @@ def main() -> None:
     for name, r in stress.items():
         print(f"   {name:20s} {r:7.1%}   (EUR {r * START_VALUE:,.0f})")
 
-    # Figure: fan chart (block bootstrap) and terminal value distributions
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.8), layout="constrained")
+    # Figure: annotated so each panel can be read on its own
+    fig, axes = plt.subplot_mosaic([["fan", "hist"], ["bt", "bt"]], figsize=(14, 9.5), layout="constrained")
+    ax1, ax2, ax3 = axes["fan"], axes["hist"], axes["bt"]
+
+    # (a) Fan chart: how the range of outcomes widens with time
     paths = all_paths["block"]
     days = np.arange(HORIZON + 1)
-    for lo, hi, alpha in [(5, 95, 0.2), (25, 75, 0.35)]:
+    for lo, hi, alpha, txt in [(5, 95, 0.2, "90% of paths inside (5th-95th pct)"),
+                               (25, 75, 0.35, "50% of paths inside (25th-75th pct)")]:
         ax1.fill_between(days, np.percentile(paths, lo, axis=0), np.percentile(paths, hi, axis=0),
-                         alpha=alpha, color="tab:blue", label=f"{lo}th–{hi}th pct")
-    ax1.plot(days, np.median(paths, axis=0), color="tab:blue", label="Median")
+                         alpha=alpha, color="tab:blue", label=txt)
+    ax1.plot(days, np.median(paths, axis=0), color="tab:blue", lw=2, label="Median path (typical outcome)")
     ax1.plot(days, paths[:20].T, color="grey", lw=0.5, alpha=0.5)
-    ax1.set(title="Block bootstrap: 1-year portfolio paths", xlabel="Trading days", ylabel="Portfolio value (EUR)")
-    ax1.legend(loc="upper left")
+    ax1.plot([], [], color="grey", lw=0.5, label="20 example simulated paths")
+    ax1.axhline(START_VALUE, color="black", lw=0.8, ls="--", label="Start value (break-even)")
+    end_vals = np.percentile(paths[:, -1], [5, 50, 95])
+    for v, txt in zip(end_vals, ["5th pct", "median", "95th pct"]):
+        ax1.annotate(f"{txt}: {v:,.0f}", (HORIZON, v), xytext=(4, 0), textcoords="offset points",
+                     va="center", fontsize=8)
+    ax1.set(title="(a) Fan chart, block bootstrap: uncertainty grows with time",
+            xlabel="Trading days ahead (252 = one year)", ylabel="Portfolio value (EUR)",
+            xlim=(0, HORIZON * 1.18))
+    ax1.legend(loc="upper left", fontsize=8)
+    for ax in (ax1, ax2):
+        axis = ax.yaxis if ax is ax1 else ax.xaxis
+        axis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+
+    # (b) Distribution of the value after one year, with VaR and ES marked
     for method in METHODS:
-        ax2.hist(all_paths[method][:, -1], bins=120, histtype="step", label=method, density=True)
-    ax2.axvline(START_VALUE, color="black", lw=0.8)
-    ax2.set(title="Value after 1 year", xlabel="Portfolio value (EUR)", ylabel="Density")
-    ax2.legend()
+        ax2.hist(all_paths[method][:, -1], bins=120, histtype="step", label=f"{method} method", density=True)
+    blk = all_paths["block"][:, -1]
+    var99, es99 = var_es(blk - START_VALUE, 0.99)
+    ax2.axvline(START_VALUE, color="black", lw=0.8, ls="--")
+    ax2.axvline(START_VALUE - var99, color="tab:red", lw=1.2)
+    ax2.axvline(START_VALUE - es99, color="darkred", lw=1.2, ls=":")
+    ax2.axvspan(blk.min(), START_VALUE - var99, color="tab:red", alpha=0.12)
+    top = ax2.get_ylim()[1]
+    ax2.text(START_VALUE, top * 0.95, " start\n (100k)", fontsize=8, va="top")
+    ax2.text(START_VALUE - var99, top * 0.75, f" VaR99 (block)\n loss {var99:,.0f}", color="tab:red", fontsize=8, va="top")
+    ax2.text(START_VALUE - es99, top * 0.5, f"ES99 = avg of\nworst 1%:\n{es99:,.0f} ", color="darkred",
+             fontsize=8, va="top", ha="right")
+    ax2.text(START_VALUE - var99, top * 0.15, "worst 1% of years ", color="tab:red", fontsize=8, ha="right")
+    ax2.set(title="(b) Value after 1 year: left of start = loss, right = gain",
+            xlabel="Portfolio value after 1 year (EUR)", ylabel="How many paths end here (taller = more likely)")
+    ax2.set_yticks([])
+    ax2.legend(fontsize=8)
+
+    # (c) VaR backtest: each red dot is a day the loss broke the VaR line
+    v_fhs, v_norm = var_fhs[BACKTEST_START:], var_normal[BACKTEST_START:]
+    ax3.plot(test.index, test * 100, color="grey", lw=0.5, label="Actual daily portfolio return")
+    ax3.plot(v_norm.index, -v_norm * 100, color="tab:orange", lw=1, label="-VaR99, normal (slow, thin tails)")
+    ax3.plot(v_fhs.index, -v_fhs * 100, color="tab:green", lw=1, label="-VaR99, filtered historical (reacts to volatility)")
+    for v, color, name in [(v_norm, "tab:orange", "normal"), (v_fhs, "tab:green", "filtered hist.")]:
+        hit = test < -v
+        ax3.scatter(test.index[hit], test[hit] * 100, color=color, s=14, zorder=3,
+                    label=f"Breach, {name}: {int(hit.sum())} days (expected {len(test) * (1 - LEVEL):.0f})")
+    ax3.set(title="(c) VaR backtest: a good model is breached on about 1% of days, spread out, not in clusters",
+            xlabel="Date", ylabel="Daily return (%)")
+    ax3.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), fontsize=8, ncol=3)
     fig.savefig("projects/05_monte_carlo/monte_carlo.png", dpi=140)
     print("\nSaved projects/05_monte_carlo/monte_carlo.png")
 
