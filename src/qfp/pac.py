@@ -63,6 +63,20 @@ def phase_and_amplitude(
     return pd.DataFrame({"phase": np.angle(slow), "amplitude": np.abs(fast)}, index=x.index)
 
 
+def calendar_month_phase(index: pd.DatetimeIndex) -> pd.Series:
+    """Phase of each trading day within its calendar month, in radians (-pi..pi).
+
+    The first trading day of a month maps to -pi and the last to just below pi,
+    so the turn of the month sits at the +/-pi wrap. The calendar is known in
+    advance, so this phase has no look-ahead and no filter delay.
+    """
+    s = index.to_series()
+    month = index.to_period("M")
+    position = s.groupby(month).cumcount()
+    n_days = s.groupby(month).transform("count")
+    return pd.Series(-np.pi + 2 * np.pi * position / n_days, index=index)
+
+
 def modulation_index(phase: np.ndarray, amplitude: np.ndarray, n_bins: int = 18) -> float:
     """Tort et al. (2010) modulation index: 0 = no coupling, 1 = all amplitude in one bin."""
     ok = ~(np.isnan(phase) | np.isnan(amplitude))

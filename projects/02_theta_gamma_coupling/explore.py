@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 from qfp.data import clean_prices, fetch_prices
-from qfp.pac import modulation_index, period_band, phase_and_amplitude, surrogate_pvalue
+from qfp.pac import calendar_month_phase, period_band, phase_and_amplitude, surrogate_pvalue
 
 TICKERS = ["SPY", "QQQ", "IWM", "EFA", "EEM", "TLT", "GLD"]
 START = "2005-01-01"
@@ -45,7 +45,20 @@ def main() -> None:
         mi, p = surrogate_pvalue(pa["phase"].to_numpy(), pa["amplitude"].to_numpy(), n_surrogates=500)
         rows[ticker] = {"MI": mi, "p-value": p}
         profiles[ticker] = phase_profile(pa, r.shift(-1))  # next-day return: exploration only
-    print("Theta (20-60 d) phase vs gamma (5-12 d) amplitude\n", pd.DataFrame(rows).T.round(5), sep="")
+    print("A. Theta (20-60 d) phase vs gamma (5-12 d) amplitude\n", pd.DataFrame(rows).T.round(5), sep="")
+
+    # Variant B: theta = the calendar month, gamma = the size of each day's move.
+    cal_rows, cal_profiles = {}, {}
+    month_phase = calendar_month_phase(returns.index)
+    for ticker in returns:
+        r = returns[ticker]
+        pa = pd.DataFrame({"phase": month_phase, "amplitude": r.abs()})
+        mi, p = surrogate_pvalue(pa["phase"].to_numpy(), pa["amplitude"].to_numpy(), n_surrogates=500)
+        cal_rows[ticker] = {"MI": mi, "p-value": p}
+        cal_profiles[ticker] = phase_profile(pa, r)  # same-day return: the phase is known in advance
+    print("\nB. Calendar-month phase vs daily |return|\n", pd.DataFrame(cal_rows).T.round(5), sep="")
+    print("\nB. Mean daily return (bps) by position in the month (-180 = first day, +180 = last day)")
+    print((pd.DataFrame({t: p["next_return"] for t, p in cal_profiles.items()}) * 1e4).round(1))
 
     fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
     for ticker, prof in profiles.items():

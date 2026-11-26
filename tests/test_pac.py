@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from qfp.pac import (
+    calendar_month_phase,
     causal_filter,
     complex_bandpass_kernel,
     modulation_index,
@@ -63,3 +64,12 @@ def test_surrogates_separate_coupled_from_uncoupled():
     coupled = phase_and_amplitude(_coupled_signal(coupled=True), THETA, GAMMA)
     _, p_coupled = surrogate_pvalue(coupled["phase"].to_numpy(), coupled["amplitude"].to_numpy(), n_surrogates=100)
     assert p_coupled < 0.05
+
+
+def test_calendar_month_phase_runs_from_minus_pi_within_each_month():
+    idx = pd.bdate_range("2024-01-01", "2024-03-31")
+    phase = calendar_month_phase(idx)
+    firsts = phase.groupby(idx.to_period("M")).first()
+    assert np.allclose(firsts, -np.pi)
+    assert (phase < np.pi).all()
+    assert (phase.groupby(idx.to_period("M")).apply(lambda p: p.is_monotonic_increasing)).all()
