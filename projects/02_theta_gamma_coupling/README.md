@@ -10,9 +10,9 @@ of fast moves depend on where we are in a slower cycle, and can that be traded?
 - [x] Causal PAC toolkit: band-pass phase/amplitude, Tort modulation index, surrogate test (`src/qfp/pac.py`, `tests/test_pac.py`)
 - [x] Step 1: exploration on 7 ETFs (`explore.py`). A (filtered theta/gamma): no coupling, p 0.35–0.92. B (calendar month): volatility coupling for TLT (p 0.014) and GLD (p 0.038), not significant after Bonferroni for 14 tests; clear turn-of-the-month pattern in equity *returns*.
 - [x] Step 2: rule: hold the 5 equity ETFs from the 5th-last to the 1st trading day of the month, cash otherwise (`strategy.turn_of_month`)
-- [ ] Step 3: backtest vs buy and hold, in and out of sample, plus window sensitivity (`run.py`)
-- [ ] Step 4: robustness (bands, window length, surrogates, multiple-testing correction)
-- [ ] Step 5: results and limitations write-up
+- [x] Step 3: backtest vs buy and hold, in and out of sample, plus window sensitivity (`run.py`)
+- [x] Step 4: robustness: surrogates, Bonferroni correction, window grid chosen in sample only
+- [x] Step 5: results and limitations write-up
 
 ## From EEG to markets
 
@@ -52,3 +52,61 @@ The price is a delay (about half the filter length) and noisier phase.
 Note on data snooping: the 5+1 window was picked after seeing the full-sample
 phase table, which includes the out-of-sample years. `run.py` therefore also
 prints the window chosen on 2005–2017 only, and how it did after 2018.
+
+## Results
+
+### Step 1: is there coupling? (`explore.py`, 2005–2025, 7 ETFs)
+
+| Test | Result |
+|---|---|
+| A. Filtered theta (20–60 d) phase vs gamma (5–12 d) amplitude | No coupling in any ETF (p = 0.35–0.92) |
+| B. Calendar-month phase vs daily \|return\| | TLT p = 0.014, GLD p = 0.038, others p > 0.2. With 14 tests, the Bonferroni threshold is 0.004, so **none is significant** |
+| B. Calendar-month phase vs daily return | All 5 equity ETFs: the last ~4–5 trading days and the first day average +9 to +23 bps/day; mid-month ≈ 0 or negative |
+
+Rhythms estimated from prices do not nest the way brain rhythms do. The
+calendar, an external clock, does organise returns: the turn-of-the-month effect.
+
+### Step 3: trading the calendar phase (`run.py`, SPY, QQQ, IWM, EFA, EEM, 5 bps costs)
+
+Rule: equal weight in the 5 equity ETFs from the 5th-last to the 1st trading
+day of each month, cash otherwise (invested 29% of days).
+
+| | Turn of month (5+1) | Buy and hold |
+|---|---|---|
+| **In sample (2005–2017)** | | |
+| CAGR | 6.3% | 8.8% |
+| Volatility | 11.8% | 21.9% |
+| Sharpe | 0.58 | 0.50 |
+| Max drawdown | −16% | −57% |
+| **Out of sample (2018–)** | | |
+| CAGR | 3.3% | 10.4% |
+| Volatility | 9.5% | 19.6% |
+| Sharpe | 0.39 | 0.60 |
+| Max drawdown | −14% | −33% |
+| Annual turnover | 24 | 0 |
+
+**Window sensitivity.** Almost every window from "last 4–5 days + first 1–3 days"
+has a positive Sharpe in both periods, so the effect is broad, not one lucky
+setting. Choosing the window on 2005–2017 only (best: last 4 + first 2, Sharpe
+0.75) gives 0.49 out of sample, still below buy and hold (0.60).
+
+### Interpretation
+
+- **In sample, the effect is strong:** 29% of the days delivered about 70% of buy-and-hold's annual return, with a quarter of the drawdown.
+- **Out of sample, it weakened** and lost to buy and hold on Sharpe and return. This fits the literature: well-known calendar effects tend to shrink after publication and as trading becomes cheaper.
+- **Costs matter but are not the whole story.** 24× turnover at 5 bps costs ~1.2% a year. Without costs the out-of-sample Sharpe would be about 0.47, still below 0.60.
+- **Better use: timing, not a standalone strategy.** The pattern can guide *when* to invest new money or rebalance (just before month end), rather than replacing buy and hold.
+
+### Limitations
+
+- Cash earns 0% in the backtest. Out of the market 71% of the time, a T-bill yield (about 2% a year on average since 2018) would add roughly 1.5% a year.
+- The 5+1 window was picked after seeing full-sample data (data snooping); the in-sample-only grid choice is the cleaner test.
+- Only 5 broad equity ETFs; daily close-to-close data, so no intraday timing.
+- Bond and gold volatility around fixed macro release dates (jobs report, CPI, FOMC) is a better-founded follow-up than generic calendar phase.
+
+### Conclusion
+
+A neuroscience method, used carefully (causal filters, surrogates, multiple-testing
+correction), finds **no theta-gamma-style coupling inside market prices**. But it
+does recover a known external rhythm, the turn of the month, which was tradeable
+before 2018 and has since faded below buy and hold after costs.
