@@ -63,6 +63,7 @@ happens in crises (stress tests).
 | EWMA normal (λ = 0.94) | 53 | 0.0000 | Rejected |
 | Historical | 34 | 0.0196 | Rejected |
 | Filtered historical | **32** | 0.0499 | Borderline (just rejected) |
+| Filtered historical, all history (expanding window) | 35 | 0.0118 | Rejected |
 
 ### 3. Stress tests (portfolio return)
 
@@ -73,11 +74,17 @@ happens in crises (stress tests).
 | Covid crash | -22.8% | -22,836 |
 | Hypothetical shock (equities -30 to -35%, TLT +10%, GLD +5%) | -21.4% | -21,429 |
 
+## Reading the figure (`monte_carlo.png`)
+
+- **(a) Fan chart:** each grey line is one simulated year. The dark band holds the middle 50% of paths, the light band 90%. The band widens to the right because uncertainty grows with time. The dashed line is break-even.
+- **(b) Value after 1 year:** one histogram per method. Left of the dashed start line is a loss. The red line is VaR99 (only 1% of years end left of it, shaded), the dotted line is ES99 (the average of that shaded 1%).
+- **(c) VaR backtest:** grey is the real daily return; the coloured lines are each model's VaR line for that day. A dot is a breach, a day the loss fell below the line. The normal line barely moves; the filtered historical line drops when markets get wild. A good model has about 1% dots, spread out rather than clustered.
+
 ## Interpretation
 
 1. **The methods agree on VaR but not on the tail.** VaR 99% is about EUR 22.5-23k whichever way we simulate. The difference shows up beyond it: the block bootstrap has the narrowest middle (lowest P(loss), 21.6%) but the largest ES 99% (EUR 28.3k) and the worst 5% drawdown. Keeping consecutive days together keeps bad days together, so calm years look calmer and bad years look worse. VaR alone would hide this; ES shows it.
 2. **Fat tails matter more than volatility timing.** Making the normal model react to current volatility (EWMA) only cut breaches from 58 to 53. Replacing the normal curve with the empirical distribution cut them to 34. Doing both (filtered historical) gave the best result, 32, but still about 10 more breaches than expected.
-3. **No model fully passes.** The remaining excess breaches likely come from sudden jumps (e.g. March 2020) that no trailing estimate can see coming, and from estimating a 1% quantile from only 500 days, which means about 5 tail observations.
+3. **No model fully passes, and more data did not fix it.** We tested whether the excess breaches came from estimating a 1% quantile from only ~5 tail days, by giving filtered historical all standardized history since 2005 (~30+ tail days). Breaches rose from 32 to 35, so that idea is rejected. The 500-day version adapts better to the recent shape of the tails, and the remaining breaches most likely come from sudden jumps (e.g. March 2020) that start from a calm day, when yesterday's volatility estimate is still low.
 4. **Stress tests see what the simulation misses.** Replaying 2008 loses 32.7%, worse than the simulated one-year ES 99% (26.7-28.3k). Even though 2008 is in the history, resampling days or 20-day blocks rarely rebuilds a full year-long crisis. This is why risk teams report stress tests next to VaR and ES.
 
 ## Limitations
