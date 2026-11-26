@@ -12,8 +12,8 @@ Same idea as Project 2's calendar phase, now with two clocks and their interacti
 - [x] Simulation proof of concept (`torus_volume.py`)
 - [x] Real-data script for BTC 15-minute volume (`crypto_volume.py`, Binance public data)
 - [x] Baseline (20-day slot average), harmonics k = 1..3, weekday and yesterday's level
-- [ ] Run on real data and read the results
-- [ ] Results and limitations write-up
+- [x] Run on real data, with ablations
+- [x] Results and limitations write-up
 
 ## Simulation results
 
@@ -58,7 +58,39 @@ slot average, torus additive, torus + interactions, and torus + interactions +
 weekday + yesterday's volume level. Prints RMSE on log volume and mean absolute
 percentage error, and saves `crypto_volume.png` (actual vs fitted grid).
 
-## Plan for real data
+### Results (BTCUSDT, train 2021–2023, test 2024 to June 2025, 52,512 bars)
+
+| Model | RMSE (log volume) |
+|---|---|
+| Slot average, 20 days (industry baseline) | 0.804 |
+| Torus additive | 0.868 |
+| Torus + interactions (the doughnut) | 0.868 |
+| Torus + interactions + weekday + yesterday's level | 0.703 |
+| **Day waves + weekday + yesterday's level (no month cycle)** | **0.703** |
+| Torus additive + weekday + yesterday's level | 0.703 |
+| Slot-average shape + yesterday's level | 0.793 |
+
+(Mean absolute % error follows the same ranking but is inflated by a few
+extreme spikes, so RMSE on log volume is the main metric.)
+
+**What the ablation shows**
+
+- **The month cycle and the day × month interactions add nothing on real BTC volume** (0.7032 without them vs 0.7033 with them). The turn-of-the-month reversal built into the simulation does not exist here.
+- **The gain over the baseline (−12.5% RMSE) comes from three simple things:** a smooth daily shape (3 harmonics), the day of the week (crypto weekends are quieter), and yesterday's volume level (volume is persistent: busy days follow busy days).
+- **A fixed shape alone loses to the baseline** (0.868 vs 0.804) because BTC's volume level drifts strongly. Any forecast needs a level term.
+- **A smooth shape beats the raw slot average** even when both get yesterday's level (0.703 vs 0.793): 20 noisy daily observations per slot overfit, while a few harmonics fitted on 3 years average the noise out.
+
+**Conclusion.** The doughnut is a neat way to encode two clocks and works when the
+interaction exists (simulation). On real BTC data only the daily clock matters.
+The winning model is simple: daily waves + weekday + yesterday's level,
+12.5% better than the standard volume-curve baseline.
+
+**Limitations.** One asset and one exchange; a fixed train/test split rather
+than monthly walk-forward refits; the level term only uses the previous day
+(adding the last hour's volume would help for short-horizon forecasts);
+no event flags yet (macro releases, options expiry, ETF flows).
+
+## Plan for real data (original)
 
 1. **Data.** Crypto (e.g. BTC-USDT spot) has years of free 15-minute bars and
    trades 24/7, so the UTC time-of-day clock covers the full circle. For
