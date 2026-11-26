@@ -6,8 +6,9 @@ Usage (from the repo root):
 
 1. Simulate 10,000 one-year paths with three methods (normal, bootstrap,
    block bootstrap) and compare percentiles, probability of loss, VaR and ES.
-2. Backtest 1-day 99% VaR on 2018 onward (trailing 500-day window) with the
-   Kupiec test: does the model breach as rarely as it promises?
+2. Backtest 1-day 99% VaR on 2018 onward with the Kupiec test: does the model
+   breach as rarely as it promises? Static models (normal, historical; trailing
+   500 days) vs volatility-aware ones (EWMA normal, filtered historical simulation).
 3. Stress tests: replay historical crises and a hypothetical shock.
 """
 
@@ -27,6 +28,7 @@ START = "2005-01-01"
 HORIZON, N_PATHS, BLOCK = 252, 10_000, 20
 START_VALUE = 100_000  # euros, for readable numbers
 BACKTEST_START, WINDOW, LEVEL = "2018-01-01", 500, 0.99
+EWMA_LAMBDA = 0.94  # RiskMetrics daily decay
 CRISES = {"2008 crisis": ("2008-09-01", "2009-03-09"), "Covid crash": ("2020-02-19", "2020-03-23"),
           "2022 bear": ("2022-01-01", "2022-10-12")}
 SHOCK = {"SPY": -0.30, "QQQ": -0.35, "IWM": -0.35, "EFA": -0.30, "EEM": -0.35, "TLT": 0.10, "GLD": 0.05}
@@ -66,9 +68,15 @@ def main() -> None:
     roll = port.rolling(WINDOW)
     var_normal = -(roll.mean() + norm.ppf(1 - LEVEL) * roll.std()).shift(1)
     var_hist = -roll.quantile(1 - LEVEL).shift(1)
+    # Volatility-aware versions: RiskMetrics EWMA volatility (lambda = 0.94).
+    ewma_vol = np.sqrt((port**2).ewm(alpha=1 - EWMA_LAMBDA, adjust=False).mean())
+    var_ewma = -(norm.ppf(1 - LEVEL) * ewma_vol).shift(1)
+    standardized = port / ewma_vol.shift(1)  # yesterday's vol estimate scales today's return
+    var_fhs = -(standardized.rolling(WINDOW).quantile(1 - LEVEL) * ewma_vol).shift(1)
     test = port[BACKTEST_START:]
     bt = {}
-    for name, var in [("Normal", var_normal), ("Historical", var_hist)]:
+    for name, var in [("Normal", var_normal), ("Historical", var_hist),
+                      ("EWMA normal", var_ewma), ("Filtered historical", var_fhs)]:
         v = var[BACKTEST_START:]
         breaches = int((test < -v).sum())
         bt[name] = {"Days": len(test), "Expected breaches": round(len(test) * (1 - LEVEL), 1),
