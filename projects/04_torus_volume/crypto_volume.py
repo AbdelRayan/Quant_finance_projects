@@ -115,6 +115,18 @@ def main() -> None:
     full = add_context(torus_features(y.index, K_HARMONICS, True), y)
     preds["Torus + inter + weekday + level"] = fit_predict(full, y, train)
 
+    # Ablation: which ingredient earns the improvement?
+    day_only = torus_features(y.index, K_HARMONICS, False)
+    day_only = day_only[["const"] + [c for c in day_only if c.startswith("d_")]]
+    preds["Day waves + weekday + level (no month)"] = fit_predict(add_context(day_only, y), y, train)
+    no_inter = add_context(torus_features(y.index, K_HARMONICS, False), y)
+    preds["Torus additive + weekday + level"] = fit_predict(no_inter, y, train)
+    # Slot-average shape, shifted to yesterday's level: the baseline's own upgrade.
+    slot = preds["Slot average (20 d)"]
+    slot_level = slot.groupby(slot.index.normalize()).transform("mean")
+    yesterday = add_context(day_only, y)["yesterday_level"]
+    preds["Slot shape + yesterday level"] = slot - slot_level + yesterday
+
     common = test & pd.concat(preds, axis=1).notna().all(axis=1)
     rows = {}
     for name, p in preds.items():
